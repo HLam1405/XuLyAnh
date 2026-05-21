@@ -95,7 +95,6 @@ if uploaded_file is not None:
         st.image(image_pil, use_container_width=True)
     with col2:
         st.write("### Phân Tích Hybrid (YOLO + OpenCV)")
-        st.caption("🟩 Khung Xanh: YOLO định vị lỗi | 🟥 Viền Đỏ: OpenCV phân tích bề mặt")
         st.image(final_rgb_display, use_container_width=True)
         
     st.write("---")
