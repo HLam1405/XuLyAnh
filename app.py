@@ -56,7 +56,7 @@ if uploaded_file is not None:
             
             cv2.rectangle(final_display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
             label = f"{class_name} {conf:.2f}"
-            cv2.putText(final_display_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(final_display_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (113, 179, 60), 2)
             
             roi = img_bgr[y1:y2, x1:x2]
             if roi.size == 0: 
