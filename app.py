@@ -24,50 +24,19 @@ def load_model():
 try:
     model = load_model()
 except Exception:
-    st.error("Không tìm thấy tệp 'best.pt'. Hãy đảm bảo bạn đã tải mô hình về và đặt chung thư mục trên GitHub.")
+    st.error("Không tìm thấy tệp 'best.pt'. Hãy đảm bảo bạn đã tải mô hình về và đặt chung thư mục với code.")
     st.stop()
 
 # ==========================================
-# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) - HỖ TRỢ GITHUB
+# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR)
 # ==========================================
 st.sidebar.title("⚙️ Bảng điều khiển")
 
 # Cấu hình ngưỡng tin cậy (Confidence Threshold)
 conf_threshold = st.sidebar.slider("Ngưỡng tin cậy YOLO (Confidence)", 0.0, 1.0, 0.25, 0.05)
 
-# Thay đổi lời dẫn cho phù hợp với môi trường Web/Cloud
-input_method = st.sidebar.radio("Phương thức nạp ảnh bản mạch:", ["Thư mục có sẵn trên GitHub/Server", "Tải tệp từ máy tính lên (Ctrl+A)"])
-
-uploaded_files = []
-
-if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
-    uploaded_files = st.sidebar.file_uploader("📥 Chọn danh sách tệp ảnh", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
-else:
-    # Người dùng nhập tên thư mục tương đối (Ví dụ: dataset hoặc data/test)
-    folder_name = st.sidebar.text_input("📁 Nhập thư mục chứa ảnh trên GitHub (Ví dụ: dataset):", "")
-    
-    if folder_name:
-        # [SỬA LỖI ĐƯỜNG DẪN CLOUD]: Tự động ghép nối đường dẫn gốc của app.py với tên thư mục
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        full_folder_path = os.path.join(current_dir, folder_name)
-        
-        if os.path.isdir(full_folder_path):
-            valid_extensions = ('.jpg', '.jpeg', '.png')
-            files_in_dir = [f for f in os.listdir(full_folder_path) if f.lower().endswith(valid_extensions)]
-            
-            # Tạo class giả lập cấu trúc của Streamlit file_uploader
-            class LocalImageFile:
-                def __init__(self, full_path, file_name):
-                    self.path = full_path
-                    self.name = file_name
-                    
-            uploaded_files = [LocalImageFile(os.path.join(full_folder_path, f), f) for f in files_in_dir]
-            if uploaded_files:
-                st.sidebar.success(f"✅ Kết nối thành công. Tìm thấy {len(uploaded_files)} ảnh.")
-            else:
-                st.sidebar.warning("Thư mục trống hoặc không chứa file ảnh hợp lệ (.jpg, .png).")
-        else:
-            st.sidebar.error("❌ Không tìm thấy thư mục trên GitHub. Vui lòng kiểm tra lại tên.")
+# Tải tệp trực tiếp (Hỗ trợ chọn nhiều file hoặc Ctrl+A)
+uploaded_files = st.sidebar.file_uploader("📥 Tải ảnh bản mạch lên (Nhấn Ctrl+A để chọn nhiều)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
 
 # ==========================================
 # 4. LUỒNG XỬ LÝ CHÍNH
@@ -80,14 +49,11 @@ if uploaded_files:
     # ---------------------------------------------------------
     with tab1:
         selected_filename = st.selectbox("Chọn ảnh trong danh sách để phân tích:", [f.name for f in uploaded_files])
+        # Lấy tệp file tương ứng với tên đã chọn
         selected_file = next(f for f in uploaded_files if f.name == selected_filename)
         
-        # Đọc ảnh linh hoạt dựa trên phương thức đầu vào
-        if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
-            image_pil = Image.open(selected_file).convert('RGB')
-        else:
-            image_pil = Image.open(selected_file.path).convert('RGB')
-            
+        # Đọc và chuyển đổi ảnh
+        image_pil = Image.open(selected_file).convert('RGB')
         image_np = np.array(image_pil)
         img_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         final_display_img = img_bgr.copy()
@@ -141,7 +107,7 @@ if uploaded_files:
                         box_total_area += area
                         box_total_perimeter += cv2.arcLength(cnt, True)
                 
-                # Lưu thêm tham số độ tin cậy 'conf' vào báo cáo chi tiết
+                # Lưu thông số vào báo cáo chi tiết
                 cv2_report_data.append({
                     "class": class_name,
                     "conf": conf,
@@ -170,10 +136,10 @@ if uploaded_files:
             st.success("✅ Bản mạch sạch hoàn toàn - ĐẠT CHUẨN.")
 
     # ---------------------------------------------------------
-    # TAB 2: ĐÁNH GIÁ THƯ MỤC VÀ TỶ LỆ CHÍNH XÁC HÀNG LOẠT
+    # TAB 2: ĐÁNH GIÁ TỶ LỆ CHÍNH XÁC HÀNG LOẠT
     # ---------------------------------------------------------
     with tab2:
-        st.write("### 📈 Thống Kê & Phân Tích Toàn Thư Mục")
+        st.write("### 📈 Thống Kê & Phân Tích Toàn Bộ Ảnh Đã Tải Lên")
         
         if st.button("Bắt đầu Đánh giá Hàng loạt", type="primary"):
             progress_bar = st.progress(0)
@@ -185,10 +151,7 @@ if uploaded_files:
             conf_scores = []
             
             for i, file in enumerate(uploaded_files):
-                if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
-                    img_batch = Image.open(file).convert('RGB')
-                else:
-                    img_batch = Image.open(file.path).convert('RGB')
+                img_batch = Image.open(file).convert('RGB')
                     
                 res = model.predict(source=img_batch, conf=conf_threshold, verbose=False)
                 bboxes = res[0].boxes
@@ -203,7 +166,7 @@ if uploaded_files:
                 
                 progress_bar.progress((i + 1) / total_images)
             
-            st.success("Đã hoàn tất phân tích toàn bộ thư mục dữ liệu!")
+            st.success("Đã hoàn tất phân tích toàn bộ dữ liệu!")
             
             avg_conf = (sum(conf_scores) / len(conf_scores)) * 100 if conf_scores else 0
             yield_rate = (pass_count / total_images) * 100
@@ -215,4 +178,4 @@ if uploaded_files:
             col_m4.metric("Độ chính xác AI (Avg Conf)", f"{avg_conf:.1f}%")
 
 else:
-    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái.")
+    st.info("Hệ thống đang chờ dữ liệu... Vui lòng chọn ảnh từ bảng điều khiển bên trái.")
