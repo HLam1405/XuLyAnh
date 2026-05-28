@@ -28,15 +28,40 @@ except Exception:
     st.stop()
 
 # ==========================================
-# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR)
+# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) - HỖ TRỢ THƯ MỤC CỤC BỘ
 # ==========================================
 st.sidebar.title("⚙️ Bảng điều khiển")
 
 # Cấu hình ngưỡng tin cậy (Confidence Threshold)
 conf_threshold = st.sidebar.slider("Ngưỡng tin cậy YOLO (Confidence)", 0.0, 1.0, 0.25, 0.05)
 
-# Tải tệp trực tiếp (Hỗ trợ chọn nhiều file hoặc Ctrl+A)
-uploaded_files = st.sidebar.file_uploader("📥 Tải ảnh bản mạch lên (Nhấn Ctrl+A để chọn nhiều)", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+# [NÂNG CẤP LỚN] Lựa chọn phương thức nhập dữ liệu tránh phải Ctrl+A hoặc xóa thủ công
+input_method = st.sidebar.radio("Phương thức nạp ảnh bản mạch:", ["Nhập đường dẫn thư mục cục bộ", "Tải tệp trực tiếp lên (Ctrl+A)"])
+
+uploaded_files = []
+
+if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+    uploaded_files = st.sidebar.file_uploader("📥 Chọn danh sách tệp ảnh", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+else:
+    # Người dùng chỉ cần dán đường dẫn thư mục máy tính vào đây
+    folder_path = st.sidebar.text_input("📁 Nhập đường dẫn thư mục chứa ảnh (Ví dụ: D:/PCB_Dataset):", "")
+    if folder_path and os.path.isdir(folder_path):
+        valid_extensions = ('.jpg', '.jpeg', '.png')
+        files_in_dir = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
+        
+        # Tạo class giả lập cấu trúc của Streamlit file_uploader để tái sử dụng toàn bộ luồng xử lý bên dưới
+        class LocalImageFile:
+            def __init__(self, full_path, file_name):
+                self.path = full_path
+                self.name = file_name
+                
+        uploaded_files = [LocalImageFile(os.path.join(folder_path, f), f) for f in files_in_dir]
+        if uploaded_files:
+            st.sidebar.success(f"✅ Tự động kết nối thành công thư mục. Tìm thấy {len(uploaded_files)} ảnh.")
+        else:
+            st.sidebar.warning("Thư mục trống hoặc không chứa file ảnh hợp lệ (.jpg, .png).")
+    elif folder_path:
+        st.sidebar.error("❌ Đường dẫn thư mục không hợp lệ hoặc không tồn tại.")
 
 # ==========================================
 # 4. LUỒNG XỬ LÝ CHÍNH
@@ -49,11 +74,14 @@ if uploaded_files:
     # ---------------------------------------------------------
     with tab1:
         selected_filename = st.selectbox("Chọn ảnh trong danh sách để phân tích:", [f.name for f in uploaded_files])
-        # Lấy tệp file tương ứng với tên đã chọn
         selected_file = next(f for f in uploaded_files if f.name == selected_filename)
         
-        # Đọc và chuyển đổi ảnh
-        image_pil = Image.open(selected_file).convert('RGB')
+        # Đọc ảnh linh hoạt dựa trên phương thức đầu vào
+        if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+            image_pil = Image.open(selected_file).convert('RGB')
+        else:
+            image_pil = Image.open(selected_file.path).convert('RGB')
+            
         image_np = np.array(image_pil)
         img_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         final_display_img = img_bgr.copy()
@@ -80,9 +108,7 @@ if uploaded_files:
                 
                 # Vẽ nhãn tên lỗi (Text màu xanh lục mượt dịu mắt, có hộp nền trắng)
                 label = f"{class_name} {conf:.2f}"
-                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                cv2.rectangle(final_display_img, (x1, y1 - h - 10), (x1 + w, y1), (255, 255, 255), -1)
-                cv2.putText(final_display_img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 128, 0), 1, lineType=cv2.LINE_AA)
+                cv2.putText(final_display_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (113, 179, 60), 2)
                 
                 # XỬ LÝ TRÍCH XUẤT OPENCV (ROI)
                 roi = img_bgr[y1:y2, x1:x2]
@@ -102,12 +128,11 @@ if uploaded_files:
                     area = cv2.contourArea(cnt)
                     if area > 5: 
                         cnt_shifted = cnt + np.array([x1, y1])
-                        # Sử dụng cv2.LINE_AA giúp viền mịn, sắc nét rõ ràng
-                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1, lineType=cv2.LINE_AA)
+                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1)
                         box_total_area += area
                         box_total_perimeter += cv2.arcLength(cnt, True)
                 
-                # Lưu thông số vào báo cáo chi tiết
+                # [NÂNG CẤP] Lưu thêm tham số độ tin cậy 'conf' vào báo cáo chi tiết
                 cv2_report_data.append({
                     "class": class_name,
                     "conf": conf,
@@ -130,16 +155,17 @@ if uploaded_files:
         
         if len(boxes) > 0:
             st.error(f"⚠️ Hệ thống phát hiện **{len(boxes)}** khuyết tật trên bề mặt linh kiện:")
+            # [NÂNG CẤP] Hiển thị rõ ràng điểm tin cậy Confidence của từng lỗi cụ thể
             for idx, data in enumerate(cv2_report_data):
                 st.write(f"**Khuyết tật {idx + 1} - `{data['class'].upper()}` (Độ tin cậy: `{data['conf'] * 100:.1f}%`):** Diện tích: `{data['area']:.2f}` px | Chu vi: `{data['perimeter']:.2f}` px")
         else:
             st.success("✅ Bản mạch sạch hoàn toàn - ĐẠT CHUẨN.")
 
     # ---------------------------------------------------------
-    # TAB 2: ĐÁNH GIÁ TỶ LỆ CHÍNH XÁC HÀNG LOẠT
+    # TAB 2: ĐÁNH GIÁ THƯ MỤC VÀ TỶ LỆ CHÍNH XÁC HÀNG LOẠT
     # ---------------------------------------------------------
     with tab2:
-        st.write("### 📈 Thống Kê & Phân Tích Toàn Bộ Ảnh Đã Tải Lên")
+        st.write("### 📈 Thống Kê & Phân Tích Toàn Thư Mục")
         
         if st.button("Bắt đầu Đánh giá Hàng loạt", type="primary"):
             progress_bar = st.progress(0)
@@ -151,7 +177,10 @@ if uploaded_files:
             conf_scores = []
             
             for i, file in enumerate(uploaded_files):
-                img_batch = Image.open(file).convert('RGB')
+                if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+                    img_batch = Image.open(file).convert('RGB')
+                else:
+                    img_batch = Image.open(file.path).convert('RGB')
                     
                 res = model.predict(source=img_batch, conf=conf_threshold, verbose=False)
                 bboxes = res[0].boxes
@@ -166,7 +195,7 @@ if uploaded_files:
                 
                 progress_bar.progress((i + 1) / total_images)
             
-            st.success("Đã hoàn tất phân tích toàn bộ dữ liệu!")
+            st.success("Đã hoàn tất phân tích toàn bộ thư mục dữ liệu!")
             
             avg_conf = (sum(conf_scores) / len(conf_scores)) * 100 if conf_scores else 0
             yield_rate = (pass_count / total_images) * 100
@@ -178,4 +207,4 @@ if uploaded_files:
             col_m4.metric("Độ chính xác AI (Avg Conf)", f"{avg_conf:.1f}%")
 
 else:
-    st.info("Hệ thống đang chờ dữ liệu... Vui lòng chọn ảnh từ bảng điều khiển bên trái.")
+    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái.")
