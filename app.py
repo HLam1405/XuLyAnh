@@ -207,4 +207,4 @@ if uploaded_files:
             col_m4.metric("Độ chính xác AI (Avg Conf)", f"{avg_conf:.1f}%")
 
 else:
-    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái."
+    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái.")
