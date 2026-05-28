@@ -28,23 +28,42 @@ except Exception:
     st.stop()
 
 # ==========================================
-# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) - HỖ TRỢ THƯ MỤC CỤC BỘ
+# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) & CƠ CHẾ RESET
 # ==========================================
 st.sidebar.title("⚙️ Bảng điều khiển")
+
+# Khởi tạo key trong session_state để quản lý bộ nhớ tạm của các ô nhập liệu
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 # Cấu hình ngưỡng tin cậy (Confidence Threshold)
 conf_threshold = st.sidebar.slider("Ngưỡng tin cậy YOLO (Confidence)", 0.0, 1.0, 0.25, 0.05)
 
-# [NÂNG CẤP LỚN] Lựa chọn phương thức nhập dữ liệu tránh phải Ctrl+A hoặc xóa thủ công
+# Thêm nút Xóa nhanh toàn bộ ảnh
+if st.sidebar.button("🗑️ Xóa toàn bộ ảnh", use_container_width=True):
+    st.session_state.uploader_key += 1
+    st.rerun()
+
+# Lựa chọn phương thức nhập dữ liệu
 input_method = st.sidebar.radio("Phương thức nạp ảnh bản mạch:", ["Nhập đường dẫn thư mục cục bộ", "Tải tệp trực tiếp lên (Ctrl+A)"])
 
 uploaded_files = []
 
 if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
-    uploaded_files = st.sidebar.file_uploader("📥 Chọn danh sách tệp ảnh", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
+    # Gắn key động để có thể reset
+    uploaded_files = st.sidebar.file_uploader(
+        "📥 Chọn danh sách tệp ảnh", 
+        type=['jpg', 'png', 'jpeg'], 
+        accept_multiple_files=True,
+        key=f"file_uploader_{st.session_state.uploader_key}"
+    )
 else:
-    # Người dùng chỉ cần dán đường dẫn thư mục máy tính vào đây
-    folder_path = st.sidebar.text_input("📁 Nhập đường dẫn thư mục chứa ảnh (Ví dụ: D:/PCB_Dataset):", "")
+    # Gắn key động để có thể reset đường dẫn
+    folder_path = st.sidebar.text_input(
+        "📁 Nhập đường dẫn thư mục chứa ảnh (Ví dụ: D:/PCB_Dataset):", 
+        value="",
+        key=f"folder_path_{st.session_state.uploader_key}"
+    )
     if folder_path and os.path.isdir(folder_path):
         valid_extensions = ('.jpg', '.jpeg', '.png')
         files_in_dir = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
@@ -128,7 +147,7 @@ if uploaded_files:
                     area = cv2.contourArea(cnt)
                     if area > 5: 
                         cnt_shifted = cnt + np.array([x1, y1])
-                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1)
+                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1, lineType=cv2.LINE_AA)
                         box_total_area += area
                         box_total_perimeter += cv2.arcLength(cnt, True)
                 
