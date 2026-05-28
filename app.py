@@ -24,44 +24,50 @@ def load_model():
 try:
     model = load_model()
 except Exception:
-    st.error("Không tìm thấy tệp 'best.pt'. Hãy đảm bảo bạn đã tải mô hình về và đặt chung thư mục với code.")
+    st.error("Không tìm thấy tệp 'best.pt'. Hãy đảm bảo bạn đã tải mô hình về và đặt chung thư mục trên GitHub.")
     st.stop()
 
 # ==========================================
-# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) - HỖ TRỢ THƯ MỤC CỤC BỘ
+# 3. BẢNG ĐIỀU KHIỂN (SIDEBAR) - HỖ TRỢ GITHUB
 # ==========================================
 st.sidebar.title("⚙️ Bảng điều khiển")
 
 # Cấu hình ngưỡng tin cậy (Confidence Threshold)
 conf_threshold = st.sidebar.slider("Ngưỡng tin cậy YOLO (Confidence)", 0.0, 1.0, 0.25, 0.05)
 
-# [NÂNG CẤP LỚN] Lựa chọn phương thức nhập dữ liệu tránh phải Ctrl+A hoặc xóa thủ công
-input_method = st.sidebar.radio("Phương thức nạp ảnh bản mạch:", ["Nhập đường dẫn thư mục cục bộ", "Tải tệp trực tiếp lên (Ctrl+A)"])
+# Thay đổi lời dẫn cho phù hợp với môi trường Web/Cloud
+input_method = st.sidebar.radio("Phương thức nạp ảnh bản mạch:", ["Thư mục có sẵn trên GitHub/Server", "Tải tệp từ máy tính lên (Ctrl+A)"])
 
 uploaded_files = []
 
-if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
     uploaded_files = st.sidebar.file_uploader("📥 Chọn danh sách tệp ảnh", type=['jpg', 'png', 'jpeg'], accept_multiple_files=True)
 else:
-    # Người dùng chỉ cần dán đường dẫn thư mục máy tính vào đây
-    folder_path = st.sidebar.text_input("📁 Nhập đường dẫn thư mục chứa ảnh (Ví dụ: D:/PCB_Dataset):", "")
-    if folder_path and os.path.isdir(folder_path):
-        valid_extensions = ('.jpg', '.jpeg', '.png')
-        files_in_dir = [f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
+    # Người dùng nhập tên thư mục tương đối (Ví dụ: dataset hoặc data/test)
+    folder_name = st.sidebar.text_input("📁 Nhập thư mục chứa ảnh trên GitHub (Ví dụ: dataset):", "")
+    
+    if folder_name:
+        # [SỬA LỖI ĐƯỜNG DẪN CLOUD]: Tự động ghép nối đường dẫn gốc của app.py với tên thư mục
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        full_folder_path = os.path.join(current_dir, folder_name)
         
-        # Tạo class giả lập cấu trúc của Streamlit file_uploader để tái sử dụng toàn bộ luồng xử lý bên dưới
-        class LocalImageFile:
-            def __init__(self, full_path, file_name):
-                self.path = full_path
-                self.name = file_name
-                
-        uploaded_files = [LocalImageFile(os.path.join(folder_path, f), f) for f in files_in_dir]
-        if uploaded_files:
-            st.sidebar.success(f"✅ Tự động kết nối thành công thư mục. Tìm thấy {len(uploaded_files)} ảnh.")
+        if os.path.isdir(full_folder_path):
+            valid_extensions = ('.jpg', '.jpeg', '.png')
+            files_in_dir = [f for f in os.listdir(full_folder_path) if f.lower().endswith(valid_extensions)]
+            
+            # Tạo class giả lập cấu trúc của Streamlit file_uploader
+            class LocalImageFile:
+                def __init__(self, full_path, file_name):
+                    self.path = full_path
+                    self.name = file_name
+                    
+            uploaded_files = [LocalImageFile(os.path.join(full_folder_path, f), f) for f in files_in_dir]
+            if uploaded_files:
+                st.sidebar.success(f"✅ Kết nối thành công. Tìm thấy {len(uploaded_files)} ảnh.")
+            else:
+                st.sidebar.warning("Thư mục trống hoặc không chứa file ảnh hợp lệ (.jpg, .png).")
         else:
-            st.sidebar.warning("Thư mục trống hoặc không chứa file ảnh hợp lệ (.jpg, .png).")
-    elif folder_path:
-        st.sidebar.error("❌ Đường dẫn thư mục không hợp lệ hoặc không tồn tại.")
+            st.sidebar.error("❌ Không tìm thấy thư mục trên GitHub. Vui lòng kiểm tra lại tên.")
 
 # ==========================================
 # 4. LUỒNG XỬ LÝ CHÍNH
@@ -77,7 +83,7 @@ if uploaded_files:
         selected_file = next(f for f in uploaded_files if f.name == selected_filename)
         
         # Đọc ảnh linh hoạt dựa trên phương thức đầu vào
-        if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+        if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
             image_pil = Image.open(selected_file).convert('RGB')
         else:
             image_pil = Image.open(selected_file.path).convert('RGB')
@@ -108,7 +114,9 @@ if uploaded_files:
                 
                 # Vẽ nhãn tên lỗi (Text màu xanh lục mượt dịu mắt, có hộp nền trắng)
                 label = f"{class_name} {conf:.2f}"
-                cv2.putText(final_display_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (113, 179, 60), 2)
+                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                cv2.rectangle(final_display_img, (x1, y1 - h - 10), (x1 + w, y1), (255, 255, 255), -1)
+                cv2.putText(final_display_img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 128, 0), 1, lineType=cv2.LINE_AA)
                 
                 # XỬ LÝ TRÍCH XUẤT OPENCV (ROI)
                 roi = img_bgr[y1:y2, x1:x2]
@@ -128,11 +136,12 @@ if uploaded_files:
                     area = cv2.contourArea(cnt)
                     if area > 5: 
                         cnt_shifted = cnt + np.array([x1, y1])
-                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1)
+                        # Sử dụng cv2.LINE_AA giúp viền mịn, sắc nét rõ ràng
+                        cv2.drawContours(final_display_img, [cnt_shifted], -1, (0, 0, 255), 1, lineType=cv2.LINE_AA)
                         box_total_area += area
                         box_total_perimeter += cv2.arcLength(cnt, True)
                 
-                # [NÂNG CẤP] Lưu thêm tham số độ tin cậy 'conf' vào báo cáo chi tiết
+                # Lưu thêm tham số độ tin cậy 'conf' vào báo cáo chi tiết
                 cv2_report_data.append({
                     "class": class_name,
                     "conf": conf,
@@ -155,7 +164,6 @@ if uploaded_files:
         
         if len(boxes) > 0:
             st.error(f"⚠️ Hệ thống phát hiện **{len(boxes)}** khuyết tật trên bề mặt linh kiện:")
-            # [NÂNG CẤP] Hiển thị rõ ràng điểm tin cậy Confidence của từng lỗi cụ thể
             for idx, data in enumerate(cv2_report_data):
                 st.write(f"**Khuyết tật {idx + 1} - `{data['class'].upper()}` (Độ tin cậy: `{data['conf'] * 100:.1f}%`):** Diện tích: `{data['area']:.2f}` px | Chu vi: `{data['perimeter']:.2f}` px")
         else:
@@ -177,7 +185,7 @@ if uploaded_files:
             conf_scores = []
             
             for i, file in enumerate(uploaded_files):
-                if input_method == "Tải tệp trực tiếp lên (Ctrl+A)":
+                if input_method == "Tải tệp từ máy tính lên (Ctrl+A)":
                     img_batch = Image.open(file).convert('RGB')
                 else:
                     img_batch = Image.open(file.path).convert('RGB')
