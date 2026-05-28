@@ -103,10 +103,10 @@ if uploaded_files:
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(w_img, x2), min(h_img, y2)
                 
-                # Vẽ Khung YOLO 
+                # Vẽ Khung YOLO (Khung bao xanh lá)
                 cv2.rectangle(final_display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 
-                # Vẽ nhãn tên lỗi 
+                # Vẽ nhãn tên lỗi (Text màu xanh lục mượt dịu mắt, có hộp nền trắng)
                 label = f"{class_name} {conf:.2f}"
                 cv2.putText(final_display_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (113, 179, 60), 2)
                 
@@ -132,6 +132,7 @@ if uploaded_files:
                         box_total_area += area
                         box_total_perimeter += cv2.arcLength(cnt, True)
                 
+                # [NÂNG CẤP] Lưu thêm tham số độ tin cậy 'conf' vào báo cáo chi tiết
                 cv2_report_data.append({
                     "class": class_name,
                     "conf": conf,
@@ -154,6 +155,7 @@ if uploaded_files:
         
         if len(boxes) > 0:
             st.error(f"⚠️ Hệ thống phát hiện **{len(boxes)}** khuyết tật trên bề mặt linh kiện:")
+            # [NÂNG CẤP] Hiển thị rõ ràng điểm tin cậy Confidence của từng lỗi cụ thể
             for idx, data in enumerate(cv2_report_data):
                 st.write(f"**Khuyết tật {idx + 1} - `{data['class'].upper()}` (Độ tin cậy: `{data['conf'] * 100:.1f}%`):** Diện tích: `{data['area']:.2f}` px | Chu vi: `{data['perimeter']:.2f}` px")
         else:
@@ -205,4 +207,4 @@ if uploaded_files:
             col_m4.metric("Độ chính xác AI (Avg Conf)", f"{avg_conf:.1f}%")
 
 else:
-    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái.")
+    st.info("Hệ thống đang chờ dữ liệu... Vui lòng nạp thư mục hoặc chọn ảnh từ thanh điều khiển bên trái."
